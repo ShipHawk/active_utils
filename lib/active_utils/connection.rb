@@ -1,5 +1,6 @@
 require 'uri'
 require 'net/http'
+# require 'net/http/middleware'
 require 'net/https'
 require 'benchmark'
 
@@ -56,33 +57,70 @@ module ActiveUtils
         begin
           info "connection_http_method=#{method.to_s.upcase} connection_uri=#{endpoint}", tag
 
-          result = nil
+          # binding.pry
+          connection = Faraday.new(endpoint) do |faraday|
+            faraday.use ZipkinTracer::FaradayHandler, endpoint.host
+            faraday.use :extended_logging, logger: logger if logger.present?
+            faraday.request :timer
+            faraday.adapter :httpclient
+            faraday.ssl.ca_file = ca_file
+            faraday.ssl.ca_path = ca_path
 
-          realtime = Benchmark.realtime do
-            result = case method
-            when :get
-              raise ArgumentError, "GET requests do not support a request body" if body
-              http.get(endpoint.request_uri, headers)
-            when :post
-              debug body
-              http.post(endpoint.request_uri, body, RUBY_184_POST_HEADERS.merge(headers))
-            when :put
-              debug body
-              http.put(endpoint.request_uri, body, headers)
-            when :delete
-              # It's kind of ambiguous whether the RFC allows bodies
-              # for DELETE requests. But Net::HTTP's delete method
-              # very unambiguously does not.
-              raise ArgumentError, "DELETE requests do not support a request body" if body
-              http.delete(endpoint.request_uri, headers)
-            else
-              raise ArgumentError, "Unsupported request method #{method.to_s.upcase}"
+            RUBY_184_POST_HEADERS.merge(headers).each do |k, v|
+              faraday.headers[k] = v
+            end
+
+            if pem.present?
+              faraday.ssl.client_cert = OpenSSL::X509::Certificate.new(pem)
+
+              if pem_password.present?
+                faraday.ssl.client_key = OpenSSL::PKey::RSA.new(pem, pem_password)
+              else
+                faraday.ssl.client_key = OpenSSL::PKey::RSA.new(pem)
+              end
             end
           end
 
-          info "--> %d %s (%d %.4fs)" % [result.code, result.message, result.body ? result.body.length : 0, realtime], tag
-          debug result.body
-          result
+          response = connection.public_send(method, endpoint.path, body) do |req|
+            req.options.timeout = read_timeout
+            req.options.open_timeout = open_timeout
+          end
+
+          info "--> %d (%d %.4fs)" % [response.status, response.body ? response.body.length : 0, response.env[:duration]], tag
+          debug response.body if response.body.present?
+          response
+
+          # result = nil
+          # realtime = Benchmark.realtime do
+          #   result = case method
+          #   when :get
+          #     raise ArgumentError, "GET requests do not support a request body" if body
+          #     http.get(endpoint.request_uri, headers)
+          #   when :post
+          #     debug body
+          #     # begin
+          #       http.post(endpoint.request_uri, body, RUBY_184_POST_HEADERS.merge(headers))
+          #     # rescue Exception => e
+          #     #   binding.pry
+          #     #   raise e
+          #     # end
+          #   when :put
+          #     debug body
+          #     http.put(endpoint.request_uri, body, headers)
+          #   when :delete
+          #     # It's kind of ambiguous whether the RFC allows bodies
+          #     # for DELETE requests. But Net::HTTP's delete method
+          #     # very unambiguously does not.
+          #     raise ArgumentError, "DELETE requests do not support a request body" if body
+          #     http.delete(endpoint.request_uri, headers)
+          #   else
+          #     raise ArgumentError, "Unsupported request method #{method.to_s.upcase}"
+          #   end
+          # end
+
+          # info "--> %d %s (%d %.4fs)" % [result.code, result.message, result.body ? result.body.length : 0, realtime], tag
+          # debug result.body if result.body.present?
+          # result
         end
       end
 
@@ -93,12 +131,19 @@ module ActiveUtils
     private
     def http
       http = Net::HTTP.new(endpoint.host, endpoint.port, proxy_address, proxy_port)
+      # configure_middleware(http, endpoint)
       configure_debugging(http)
       configure_timeouts(http)
       configure_ssl(http)
       configure_cert(http)
       http
     end
+
+    # def configure_middleware(http, endpoint)
+    #   Net::HTTP.configure_middleware do |chain|
+    #     chain.use ZipkinTracer::NetHttpHandler, endpoint
+    #   end
+    # end
 
     def configure_debugging(http)
       http.set_debug_output(wiredump_device)
@@ -141,7 +186,8 @@ module ActiveUtils
       if @ignore_http_status then
         return response.body
       else
-        case response.code.to_i
+        # case response.code.to_i
+        case response.status.to_i
         when 200...300
           response.body
         else
