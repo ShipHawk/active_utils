@@ -57,7 +57,6 @@ module ActiveUtils
         begin
           info "connection_http_method=#{method.to_s.upcase} connection_uri=#{endpoint}", tag
 
-          # binding.pry
           connection = Faraday.new(endpoint) do |faraday|
             faraday.use ZipkinTracer::FaradayHandler, endpoint.host
             faraday.use :extended_logging, logger: logger if logger.present?
@@ -89,38 +88,6 @@ module ActiveUtils
           info "--> %d (%d %.4fs)" % [response.status, response.body ? response.body.length : 0, response.env[:duration]], tag
           debug response.body if response.body.present?
           response
-
-          # result = nil
-          # realtime = Benchmark.realtime do
-          #   result = case method
-          #   when :get
-          #     raise ArgumentError, "GET requests do not support a request body" if body
-          #     http.get(endpoint.request_uri, headers)
-          #   when :post
-          #     debug body
-          #     # begin
-          #       http.post(endpoint.request_uri, body, RUBY_184_POST_HEADERS.merge(headers))
-          #     # rescue Exception => e
-          #     #   binding.pry
-          #     #   raise e
-          #     # end
-          #   when :put
-          #     debug body
-          #     http.put(endpoint.request_uri, body, headers)
-          #   when :delete
-          #     # It's kind of ambiguous whether the RFC allows bodies
-          #     # for DELETE requests. But Net::HTTP's delete method
-          #     # very unambiguously does not.
-          #     raise ArgumentError, "DELETE requests do not support a request body" if body
-          #     http.delete(endpoint.request_uri, headers)
-          #   else
-          #     raise ArgumentError, "Unsupported request method #{method.to_s.upcase}"
-          #   end
-          # end
-
-          # info "--> %d %s (%d %.4fs)" % [result.code, result.message, result.body ? result.body.length : 0, realtime], tag
-          # debug result.body if result.body.present?
-          # result
         end
       end
 
