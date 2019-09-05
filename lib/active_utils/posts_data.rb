@@ -73,8 +73,7 @@ module ActiveUtils #:nodoc:
     end
 
     def handle_response(response)
-      # case response.code.to_i
-      case response.status.to_i
+      case (response&.status || response&.code).to_i
       when 200...300
         response.body
       else
