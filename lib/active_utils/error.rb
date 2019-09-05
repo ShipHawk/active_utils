@@ -19,7 +19,7 @@ module ActiveUtils #:nodoc:
     end
 
     def to_s
-      code = response&.status || response&.code
+      code = response.try(:status) || response.try(:code)
       "Failed with #{code} #{response.message if response.respond_to?(:message)}"
     end
   end

@@ -152,7 +152,7 @@ module ActiveUtils
       if @ignore_http_status then
         return response.body
       else
-        case (response&.status || response&.code).to_i
+        case (response.try(:status) || response.try(:code)).to_i
         when 200...300
           response.body
         else
