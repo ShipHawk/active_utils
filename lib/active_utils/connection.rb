@@ -1,6 +1,5 @@
 require 'uri'
 require 'net/http'
-# require 'net/http/middleware'
 require 'net/https'
 require 'benchmark'
 
@@ -58,7 +57,7 @@ module ActiveUtils
           info "connection_http_method=#{method.to_s.upcase} connection_uri=#{endpoint}", tag
 
           connection = Faraday.new(endpoint) do |faraday|
-            faraday.use(ZipkinTracer::FaradayHandler, endpoint.host) unless ::Rails.env.test?
+            faraday.use(ZipkinTracer::FaradayHandler, endpoint.host) unless ENV['RAILS_ENV'] == 'test'
             faraday.use :extended_logging, logger: logger if logger.present?
             faraday.request :timer
             faraday.adapter :httpclient
