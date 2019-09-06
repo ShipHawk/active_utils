@@ -2,6 +2,7 @@ require 'uri'
 require 'net/http'
 require 'net/https'
 require 'benchmark'
+require 'faraday-request-timer'
 
 module ActiveUtils
   class Connection
